@@ -94,5 +94,5 @@ sops edit filename.yaml
 For convenience add the following export:
 
 ```bash
-export 
+export SOPS_AGE_KEY_FILE=$HOME/.age/age.agekey
 ```
