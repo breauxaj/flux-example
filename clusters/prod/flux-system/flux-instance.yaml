@@ -25,5 +25,5 @@ spec:
     kind: GitRepository
     url: "ssh://git@github.com:breauxaj/flux-example.git"
     ref: "refs/heads/main"
-    path: "clusters/dev"
+    path: "clusters/prod"
     pullSecret: "flux-system"
