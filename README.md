@@ -59,8 +59,8 @@ mkdir -p $HOME/.age
 age-keygen -o .age/age.agekey
 ```
 
-Apply the key the cluster — the Flux Operator's kustomize-controller will look
-for this secret:
+Apply the key to the cluster — the Flux Operator's kustomize-controller will
+look for this secret:
 
 ```bash
 kubectl create secret generic sops-age \
