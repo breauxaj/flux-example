@@ -11,7 +11,7 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
 ```
 
 This is preferred over the flux bootstrap method. Much cleaner and only
-requires readonly access to the git respository.
+requires readonly access to the git repository.
 
 ## SSH Keys
 
@@ -29,23 +29,29 @@ kubectl create secret generic flux-system \
   --namespace flux-system \
   --from-file=identity=$HOME/.ssh/flux_id_ed25519 \
   --from-file=identity.pub=$HOME/.ssh/flux_id_ed25519.pub \
-  --from-literal=known_hosts="$(ssh-keyscan bitbucket.org 2>/dev/null)"
+  --from-literal=known_hosts="$(ssh-keyscan github.com 2>/dev/null)"
 ```
 
 ## FluxInstance
 
-To connect the cluster to the Git repository, apply the flux-instance:
+To connect each cluster to the Git repository, apply the matching FluxInstance:
 
 ```bash
-kubctl apply -f clusters/dev/flux-system/flux-instance.yaml
+kubectl apply -f clusters/dev/flux-system/flux-instance.yaml
+kubectl apply -f clusters/test/flux-system/flux-instance.yaml
+kubectl apply -f clusters/prod/flux-system/flux-instance.yaml
 ```
 
 This will start the process of reconciliation.
 
+The sync URL in each FluxInstance must use the SSH protocol form
+`ssh://git@github.com/org/repo.git` (a slash after the host). Flux does not
+support scp-style URLs such as `git@github.com:org/repo.git`.
+
 ## Secrets
 
 We're going to use SOPS/Age to manage secrets, it requires no external
-resources and can safeky exist in the repository. Flux has built in support
+resources and can safely exist in the repository. Flux has built in support
 for SOPS and age encrypted secrets.
 
 ```bash

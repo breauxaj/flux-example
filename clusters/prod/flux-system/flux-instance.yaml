@@ -23,7 +23,7 @@ spec:
     networkPolicy: true
   sync:
     kind: GitRepository
-    url: "ssh://git@github.com:breauxaj/flux-example.git"
+    url: "ssh://git@github.com/breauxaj/flux-example.git"
     ref: "refs/heads/main"
     path: "clusters/prod"
     pullSecret: "flux-system"
