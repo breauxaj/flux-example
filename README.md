@@ -1,5 +1,12 @@
 # Flux Example
 
+GitOps conventions for this repo live in [`.cursor/skills/flux-gitops`](.cursor/skills/flux-gitops/SKILL.md).
+
+Each FluxInstance syncs **only** `clusters/<env>/flux-system`. The operator
+generates a GitRepository and root Kustomization named `flux-system` (the
+namespace). Child Flux Kustomizations must `sourceRef` that name when layers
+are added later.
+
 ## Operator Install
 
 Prepare the target cluster(s) by installing the Flux Operator:
@@ -42,7 +49,8 @@ kubectl apply -f clusters/test/flux-system/flux-instance.yaml
 kubectl apply -f clusters/prod/flux-system/flux-instance.yaml
 ```
 
-This will start the process of reconciliation.
+This will start the process of reconciliation. Each instance syncs
+`clusters/<env>/flux-system` only (`spec.sync.path`).
 
 The sync URL in each FluxInstance must use the SSH protocol form
 `ssh://git@github.com/org/repo.git` (a slash after the host). Flux does not
