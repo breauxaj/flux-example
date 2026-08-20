@@ -1,0 +1,9 @@
+*.env
+kubeconfig
+*.key
+*.pem
+.DS_Store
+.idea/
+*.swp
+*.plaintext.yaml
+cluster-secrets.yaml.dec
