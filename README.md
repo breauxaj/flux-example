@@ -56,7 +56,7 @@ Generate an Age key
 
 ```bash
 mkdir -p $HOME/.age
-age-keygen -o .age/age.agekey
+age-keygen -o $HOME/.age/age.agekey
 ```
 
 Apply the key to the cluster — the Flux Operator's kustomize-controller will
