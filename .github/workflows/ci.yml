@@ -1,0 +1,129 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      KUSTOMIZE_VERSION: "5.4.2"
+      KUBECONFORM_VERSION: "0.6.7"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+            | tar xz -C "$HOME/.local/bin" kustomize
+          curl -sL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz -C "$HOME/.local/bin" kubeconform
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          python3 -m pip install pyyaml
+
+      - name: Reject scp-style FluxInstance SSH URLs
+        run: |
+          set -euo pipefail
+          python3 - << 'PYEOF'
+          import glob, re, sys, yaml
+
+          # ssh://git@host:org/repo is invalid; ssh://git@host/org/repo and
+          # ssh://git@host:22/org/repo are valid.
+          scp_in_ssh = re.compile(r"^ssh://[^/]+@[^:/]+:(?!\d+(?:/|$))")
+          failures = []
+          for path in glob.glob("clusters/**/flux-instance.yaml", recursive=True):
+              with open(path) as fh:
+                  for doc in yaml.safe_load_all(fh):
+                      if not doc or doc.get("kind") != "FluxInstance":
+                          continue
+                      url = (doc.get("spec") or {}).get("sync") or {}
+                      url = url.get("url") or ""
+                      if scp_in_ssh.search(url) or (url.startswith("git@") and ":" in url):
+                          failures.append(f"{path}: {url}")
+          if failures:
+              print("ERROR: scp-style SSH URLs (use ssh://git@host/org/repo.git):")
+              print("\n".join(failures))
+              sys.exit(1)
+          print("OK: FluxInstance SSH URLs")
+          PYEOF
+
+      - name: kustomize build cluster entrypoints
+        run: |
+          set -euo pipefail
+          for env_dir in clusters/dev/flux-system clusters/test/flux-system clusters/prod/flux-system; do
+            kustomize build "$env_dir" > /dev/null
+          done
+
+      - name: kubeconform
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/validate-copy
+          cp -r . /tmp/validate-copy/repo
+          find /tmp/validate-copy/repo -name "*.yaml" \
+            -exec sed -i 's/\${replica_count}/1/g' {} +
+          find /tmp/validate-copy/repo -name "*.yaml" \
+            -exec sed -i 's/\${cluster_domain}/example.com/g' {} +
+          find /tmp/validate-copy/repo -name "*.yaml" \
+            -not -path "*/.github/*" \
+            -not -name "kustomization.yaml" \
+            -not -name "*-patch.yaml" \
+            -not -name "*secrets*.yaml" \
+            -not -name ".sops.yaml" \
+            -print0 | \
+          xargs -0 kubeconform \
+            --schema-location default \
+            --schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            --ignore-missing-schemas \
+            --summary
+
+      - name: Encrypted secrets
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r f; do
+            found=1
+            if ! grep -q "sops:" "$f"; then
+              echo "ERROR: Unencrypted secret: $f"
+              exit 1
+            fi
+          done < <(find . \( -path "*/secrets/*.yaml" -o -name "cluster-secrets.yaml" -o -name "*secrets.yaml" \) \
+            -not -name "kustomization.yaml" \
+            -not -path "./.git/*" || true)
+          if [ "$found" -eq 0 ]; then
+            echo "OK: no secret manifests to check"
+          else
+            echo "OK: secret manifests are SOPS-encrypted"
+          fi
+
+      - name: No prune targeting kube-system
+        run: |
+          set -euo pipefail
+          python3 - << 'PYEOF'
+          import glob, sys, yaml
+
+          violations = []
+          for path in glob.glob("clusters/**/*.yaml", recursive=True):
+              with open(path) as fh:
+                  for doc in yaml.safe_load_all(fh):
+                      if not doc or doc.get("kind") != "Kustomization":
+                          continue
+                      if "kustomize.toolkit.fluxcd.io" not in str(doc.get("apiVersion", "")):
+                          continue
+                      spec = doc.get("spec") or {}
+                      if spec.get("prune") and spec.get("targetNamespace") == "kube-system":
+                          violations.append(path)
+          if violations:
+              print(f"ERROR: prune:true targeting kube-system: {violations}")
+              sys.exit(1)
+          print("OK: no prune:true violations in kube-system")
+          PYEOF
